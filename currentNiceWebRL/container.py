@@ -1,10 +1,8 @@
 import dataclasses
-import uuid
 from asyncio import Lock
-
 from nicegui import app, ui
-
-from nicewebrl.utils import get_user_lock
+import uuid
+from currentNiceWebRL.utils import get_user_lock
 
 
 @dataclasses.dataclass

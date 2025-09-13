@@ -20,16 +20,45 @@ from flax import struct
 from nicegui import app, ui
 from PIL import Image
 
-from nicewebrl.logging import get_logger
+from currentNiceWebRL.logging import get_logger
 
 # Type definitions
 TIMESTEP = Any
 RENDER_FN = Callable[[TIMESTEP], jax.Array]
 
+EnvParams = struct.PyTreeNode
+
 logger = get_logger(__name__)
 
-if __name__ == "__main__":
-    mp.set_start_method("spawn")
+# Global flag to track multiprocessing setup
+_mp_initialized = False
+
+def _ensure_multiprocessing_setup():
+    """Ensure multiprocessing is properly configured for JAX compatibility."""
+    global _mp_initialized
+    if _mp_initialized:
+        return
+    
+    try:
+        current_method = mp.get_start_method(allow_none=True)
+        if current_method is None:
+            # No method set yet, we can set spawn
+            mp.set_start_method("spawn", force=True)
+            logger.info("Set multiprocessing start method to 'spawn'")
+        elif current_method == "spawn":
+            # Already set to spawn, which is what we want
+            logger.info("Multiprocessing start method already set to 'spawn'")
+        else:
+            # Different method already set, warn but continue
+            warnings.warn(f"Multiprocessing start method is {current_method}, not 'spawn'. This may cause issues with JAX.")
+    except RuntimeError as e:
+        # This happens if start method is already set and we can't change it
+        warnings.warn(f"Cannot set multiprocessing start method: {e}")
+    finally:
+        _mp_initialized = True
+
+# Initialize multiprocessing setup
+_ensure_multiprocessing_setup()
 
 # ----------------------------
 # RNG helpers
@@ -313,6 +342,7 @@ class JaxWebEnv:
         self._pool = None
         self._mp_ctx = None
         self._env_ctor = env_ctor
+        self._pool_creation_attempted = False
 
         assert hasattr(env, "reset"), "env needs reset function"
         assert hasattr(env, "step"), "env needs step function"
@@ -326,9 +356,8 @@ class JaxWebEnv:
         except Exception:
             self._action_list = [int(x) for x in list(actions_arr)]
 
-        # Attempt to create a persistent spawn-based pool if requested
-        if self.use_multiprocessing:
-            self._maybe_create_pool()
+        # Don't create pool immediately - delay until first use
+        # This avoids the bootstrapping phase issue
 
         # expose reset directly (keep original API)
         self.reset = env.reset
@@ -337,13 +366,15 @@ class JaxWebEnv:
     def _maybe_create_pool(self):
         """
         Create a persistent Pool using 'spawn' context (safe with JAX threads).
-        Two modes:
-          - env_ctor provided: pass env_ctor to initializer; each worker calls env_ctor()
-          - env picklable: pass the env object as initarg to initializer
-        If neither is possible, disable multiprocessing and fall back to sequential.
+        Only attempt creation once to avoid repeated warnings.
         """
-        if self._pool is not None:
+        if self._pool is not None or self._pool_creation_attempted:
             return
+
+        self._pool_creation_attempted = True
+
+        # Ensure multiprocessing is set up
+        _ensure_multiprocessing_setup()
 
         # enforce 'spawn' start method for safety with JAX multithreading
         try:

@@ -1,28 +1,28 @@
+import time
+import typing
+from datetime import datetime
+from typing import Optional
+from typing import Union, Any, Callable, Tuple
+from typing import get_type_hints
+from base64 import b64encode
+from flax import struct
+from flax import serialization
+from flax.core import FrozenDict
 import io
 import inspect
-import random
-import sys
-import time
-from base64 import b64encode
-from datetime import datetime
-from typing import Any, Callable, Optional, Tuple, Union, get_type_hints
-
-import jax
 import jax.numpy as jnp
 import jax.random
 import numpy as np
-from flax import serialization, struct
-from flax.core import FrozenDict
+import random
+import sys
 from nicegui import app, ui
 from PIL import Image
 
-from nicewebrl.logging import get_logger
+from currentNiceWebRL.logging import get_logger
 
-# Type definitions
-TIMESTEP = Any
-RENDER_FN = Callable[[TIMESTEP], jax.Array]
+Timestep = Any
+RenderFn = Callable[[Timestep], jax.Array]
 
-# Module-level variables
 logger = get_logger(__name__)
 
 
@@ -109,7 +109,9 @@ class StepType(jnp.uint8):
   MID: jax.Array = jnp.asarray(1, dtype=jnp.uint8)
   LAST: jax.Array = jnp.asarray(2, dtype=jnp.uint8)
 
-ENV_PARAMS = struct.PyTreeNode
+
+EnvParams = struct.PyTreeNode
+
 
 class TimeStep(struct.PyTreeNode):
   state: struct.PyTreeNode
@@ -145,6 +147,7 @@ class TimestepWrapper(object):
     self._use_params = use_params
     self._num_leading_dims = num_leading_dims
     self._reset_w_batch_dim = reset_w_batch_dim
+
   # provide proxy access to regular attributes of wrapped object
   def __getattr__(self, name):
     return getattr(self._env, name)
@@ -189,9 +192,9 @@ class TimestepWrapper(object):
         )
       del info
       if type(done) == dict:  # multi-agent
-        done = done['__all__']
-      if type(reward) == dict:   # multi-agent
-        reward = reward['agent_0'].astype(jnp.float32)
+        done = done["__all__"]
+      if type(reward) == dict:  # multi-agent
+        reward = reward["agent_0"].astype(jnp.float32)
       return TimeStep(
         state=state,
         observation=obs,
@@ -267,8 +270,8 @@ class JaxWebEnv:
     print(f"\tstep time: {time.time() - start}")
 
   def precompile_vmap_render_fn(
-    self, render_fn: RENDER_FN, dummy_env_params: struct.PyTreeNode
-  ) -> RENDER_FN:
+    self, render_fn: RenderFn, dummy_env_params: struct.PyTreeNode
+  ) -> RenderFn:
     """Call this function to pre-compile a multi-render function before experiment starts."""
     print("Compiling multi-render function.")
     start = time.time()

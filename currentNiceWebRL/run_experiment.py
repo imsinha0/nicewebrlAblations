@@ -10,11 +10,11 @@ from nicegui import app, ui, Client
 from fastapi import APIRouter
 from tortoise import Tortoise
 
-import nicewebrl
-from nicewebrl.experiment import SimpleExperiment, Experiment
-from nicewebrl import stages
-from nicewebrl.utils import get_user_lock
-from nicewebrl.logging import setup_logging, get_logger
+import currentNiceWebRL as nicewebrl
+from currentNiceWebRL.experiment import SimpleExperiment, Experiment
+from currentNiceWebRL import stages
+from currentNiceWebRL.utils import get_user_lock
+from currentNiceWebRL.logging import setup_logging, get_logger
 
 ### --- Globals ---
 module_logger: Optional[Any] = None
@@ -190,11 +190,14 @@ async def wait_for_nicegui_ready(timeout_seconds=10):
   start_time = asyncio.get_event_loop().time()
   while True:
     # Check if client has signaled ready
-    result = await ui.run_javascript(
-      "return window.niceGuiReady || false;", timeout=1.0
-    )
-    if result:
-      break
+    try:
+      result = await ui.run_javascript(
+        "return window.niceGuiReady || false;", timeout=10.0
+      )
+      if result:
+        break
+    except Exception as e:
+      module_logger.error(f"Error checking ready signal: {e}")
 
     # Check timeout
     elapsed = asyncio.get_event_loop().time() - start_time

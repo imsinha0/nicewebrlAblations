@@ -1,0 +1,45 @@
+[project]
+name = "nicewebrl-xland-minigrid"
+version = "0.1.0"
+description = "XLand-Minigrid example for NiceWebRL"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "nicegui",
+    "tortoise-orm",
+    "Pillow",
+    "jax>=0.4.16",
+    "jaxlib>=0.4.16",
+    "distrax",
+    "flax",
+    "numpy>=1.26.4,<2",
+    "polars",
+    "xminigrid",
+    "tqdm"
+]
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "isort",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 88

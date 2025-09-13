@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from typing import Optional
 from nicegui import ui
 import time
+import os
 
 from flax import struct
 from craftax.craftax.renderer import render_craftax_pixels
@@ -10,12 +11,17 @@ from craftax.craftax_env import make_craftax_env_from_name
 from craftax.craftax.constants import Action, BLOCK_PIXEL_SIZE_HUMAN
 
 
-import nicewebrl
-from nicewebrl import JaxWebEnv, base64_npimage, TimeStep, TimestepWrapper
-from nicewebrl import Stage, EnvStage
-from nicewebrl import get_logger
-from nicewebrl.experiment import SimpleExperiment
+import currentNiceWebRL as nicewebrl
+from currentNiceWebRL import JaxWebEnv, base64_npimage, TimeStep, TimestepWrapper
+from currentNiceWebRL import get_logger
+#from nicewebrl.experiment import SimpleExperiment
 
+# Check environment variable to determine which stages module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+if ABLATION_MODE == "ablation2" or ABLATION_MODE == "ablation4":
+    from ablation2.ablation2stages import Stage, EnvStage
+else:
+    from currentNiceWebRL import Stage, EnvStage
 
 logger = get_logger(__name__)
 
@@ -173,4 +179,4 @@ environment_stage = EnvStage(
 )
 all_stages.append(environment_stage)
 
-experiment = SimpleExperiment(stages=all_stages, name="Craftax Demo")
+#experiment = SimpleExperiment(stages=all_stages, name="Craftax Demo")

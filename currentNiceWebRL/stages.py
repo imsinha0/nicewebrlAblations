@@ -8,9 +8,6 @@ import copy
 import dataclasses
 from datetime import datetime
 
-# Google Cloud Storage configuration
-GCS_BUCKET_NAME = "ishaan-latency-testing-july2"
-
 from flax import struct
 from flax import serialization
 import jax
@@ -19,22 +16,34 @@ import random
 from tortoise import fields, models
 
 from nicegui import app, ui
-from nicewebrl.nicejax import new_rng, base64_npimage, make_serializable, TimeStep
-from nicewebrl.logging import get_logger
-from nicewebrl.utils import retry_with_exponential_backoff
-from nicewebrl.utils import write_msgpack_record
-from nicewebrl.nicejax import JaxWebEnv
-import numpy as np
-from nicewebrl.container import Container
-from nicewebrl import user_data_file
+import os
 
-from upload_google_data import save_action_processing_time_to_gcs
+# Check environment variable to determine which nicejax module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+
+if ABLATION_MODE == "ablation1" or ABLATION_MODE == "ablation4":
+    # Import from ablation1nicejax.py
+    from ablation1.ablation1nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
+elif ABLATION_MODE == "ablation3":
+    # Import from ablation3nicejax.py
+    from ablation3.ablation3nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
+else:
+    # Import from normal nicejax.py
+    from currentNiceWebRL.nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
+
+from currentNiceWebRL.logging import get_logger
+from currentNiceWebRL.utils import retry_with_exponential_backoff
+from currentNiceWebRL.utils import write_msgpack_record
+import numpy as np
+from currentNiceWebRL.container import Container
+from currentNiceWebRL import user_data_file
 
 
 try:
   jax_tree_map = jax.tree.map
 except AttributeError:
   import jax
+
   jax_tree_map = jax.tree_map
 except:
   raise ImportError("Failed to import jax.tree.map or jax.tree_map")
@@ -348,7 +357,6 @@ class EnvStage(Stage):
     if self.user_save_file_fn is None:
       self.user_save_file_fn = user_data_file
 
-
     if self.check_finished is None:
       self.check_finished = lambda timestep: False
 
@@ -366,6 +374,33 @@ class EnvStage(Stage):
 
   async def finish_saving_user_data(self):
     await self.get_user_queue().join()
+
+  async def update_system_ready_time(self, system_ready_time):
+    """Update the systemReadyTime in the most recent save data"""
+    # Get the most recent save data from the queue and update it
+    queue = self.get_user_queue()
+    if not queue.empty():
+      # Process the queue with the updated system ready time
+      await self._process_save_queue_with_ready_time(system_ready_time)
+    
+    # Calculate and log the total processing time
+    if hasattr(self, '_last_image_seen_time') and self._last_image_seen_time:
+      processing_time = time_diff(self._last_image_seen_time, system_ready_time) / 1000.0
+      logger.info(f"Total processing time: {processing_time:.3f} seconds")
+    
+
+  async def _process_save_queue_with_ready_time(self, system_ready_time):
+    """Process all items currently in the queue for current user with updated system ready time"""
+    queue = self.get_user_queue()
+    while not queue.empty():
+      args, timestep, user_stats = await queue.get()
+      await self.save_experiment_data(
+        args,
+        timestep=timestep,
+        user_stats=user_stats,
+        system_ready_time_override=system_ready_time,
+      )
+      queue.task_done()
 
   async def _process_save_queue(self):
     """Process all items currently in the queue for current user"""
@@ -386,25 +421,6 @@ class EnvStage(Stage):
       timestep=timestep,
     )
 
-    attempt = 0
-    while True:
-      attempt += 1
-      try:
-        # Set the timestamp in the browser
-        await ui.run_javascript("window.imageSeenTime = new Date();", timeout=10)
-        # If successful, we can return immediately
-        return
-      except Exception as e:
-        if attempt % 10 == 0:  # Log every 10 attempts
-          logger.warning(
-            f"'{self.name}': Error getting imageSeenTime (attempt {attempt}): {e}"
-          )
-        await asyncio.sleep(0.1)  # Short delay between attempts
-        if attempt >= 10:
-          with container:
-            ui.notify("Please refresh the page", type="negative")
-          return
-
   async def step_and_send_timestep(self, container, update_display: bool = True):
     #############################
     # get next images and store them client-side
@@ -423,15 +439,12 @@ class EnvStage(Stage):
     js_code = f"window.next_states = {next_images};"
 
     ui.run_javascript(js_code)
-
     await self.set_user_data(next_timesteps=next_timesteps)
     #############################
     # display image
     #############################
     if update_display:
       await self.display_timestep(container, timestep)
-    else:
-      ui.run_javascript("window.imageSeenTime = window.next_imageSeenTime;", timeout=10)
 
   async def wait_for_start(
     self,
@@ -499,15 +512,14 @@ class EnvStage(Stage):
       nsuccesses=int(stage_state.nsuccesses),
     )
 
-  async def save_experiment_data(self, args, timestep, user_stats):
+  async def save_experiment_data(self, args, timestep, user_stats, system_ready_time_override=None):
     key = args["key"]
     keydownTime = args.get("keydownTime")
+    imageSeenTime = args.get("imageSeenTime")
+    systemReadyTime = system_ready_time_override if system_ready_time_override is not None else args.get("systemReadyTime")
     action_idx = self.key_to_action.get(key, -1)
     action_name = self.action_to_name.get(action_idx, key)
 
-    # Get action processing timing data
-    action_processing_timing = self.get_user_data("action_processing_timing", {})
-    
     timestep_data = {}
     if self.custom_data_fn is not None:
       timestep_data = self.custom_data_fn(timestep)
@@ -528,13 +540,14 @@ class EnvStage(Stage):
       stage_idx=app.storage.user.get("stage_idx"),
       session_id=app.storage.browser["id"],
       data=dict(
+        image_seen_time=imageSeenTime,
         action_taken_time=keydownTime,
+        system_ready_time=systemReadyTime,
         computer_interaction=key,
         action_name=action_name,
         action_idx=action_idx,
         timelimit=self.duration,
         timestep=serialized_timestep,
-        action_processing_timing=action_processing_timing,
         **timestep_data,
       ),
       user_data=user_data,
@@ -549,10 +562,13 @@ class EnvStage(Stage):
       await write_msgpack_record(f, save_data)
 
       name = self.metadata.get("maze", self.name)
-      if keydownTime is not None:
+      if imageSeenTime is not None and keydownTime is not None:
         stage_state = self.get_user_data("stage_state")
         if self.verbosity:
           logger.info(f"'{name}' saved file")
+          logger.info(f"image display delay ∆t: {time_diff(keydownTime, imageSeenTime) / 1000.0}")
+          if systemReadyTime is not None:
+            logger.info(f"total processing time ∆t: {time_diff(imageSeenTime, systemReadyTime) / 1000.0}")
           logger.info(f"stage state: {self.user_stats()}")
           logger.info(f"env step: {stage_state.nsteps}")
 
@@ -560,7 +576,7 @@ class EnvStage(Stage):
         if not self.ignore_missing_data:
           logger.error(f"'{name}' saved file")
           logger.error(f"stage state: {self.user_stats()}")
-          logger.error(f"keydownTime={keydownTime}")
+          logger.error(f"imageSeenTime={imageSeenTime}, keydownTime={keydownTime}, systemReadyTime={systemReadyTime}")
           await self.set_user_data(finished=True, final_save=True)
           logger.info("Stage finished due to missing data")
 
@@ -581,6 +597,7 @@ class EnvStage(Stage):
     # save experiment data so far (prior time-step + resultant action)
     # if finished, save synchronously (to avoid race condition) with next stage
     await self.set_user_data(finished=True, final_save=True)
+    currentTime = await ui.run_javascript("new Date().toISOString()", timeout=10)
 
     start_notification = self.pop_user_data("start_notification")
     if start_notification:
@@ -593,7 +610,8 @@ class EnvStage(Stage):
     await self.save_experiment_data(
       args=dict(
         key="timer",
-        keydownTime=datetime.now().isoformat() + "Z",
+        keydownTime=currentTime,
+        imageSeenTime=currentTime,
       ),
       timestep=stage_state.timestep,
       user_stats=self.user_stats(),
@@ -601,11 +619,6 @@ class EnvStage(Stage):
     logger.info(f"finished stage '{self.name}'. stats: {self.user_stats()}")
 
   async def handle_key_press(self, event, container):
-    # Get or create lock for this specific user
-    # async with self.get_user_lock():
-    #  await self._handle_key_press(event, container)
-
-    # async def _handle_key_press(self, event, container):
     key = event.args["key"]
     if self.verbosity:
       logger.info(f"handle_key_press key: {key}")
@@ -640,25 +653,22 @@ class EnvStage(Stage):
         logger.info(f"key press '{key}' not in key_to_action")
       return
 
-    # Record action processing start time
-    import time
-    action_processing_start_time = time.time()
-    
-    # Get action processing start time from client if available
-    client_action_processing_start_time = event.args.get("actionProcessingStartTime")
-    if client_action_processing_start_time is not None:
-      # Convert from milliseconds to seconds
-      client_action_processing_start_time = client_action_processing_start_time / 1000.0
-
     #############################
     # get prior timestep information and save experiment data
     # e.g. key presses
     #############################
     # asynchonously save experiment data by putting in a save queue
     # save prior timestep + current event information
+
     user_stats = self.user_stats()
     timestep = self.get_user_data("stage_state").timestep
     processed_timestep = self.preprocess_timestep(timestep)
+    
+    # Store the image seen time for later processing time calculation
+    imageSeenTime = event.args.get("imageSeenTime")
+    if imageSeenTime:
+      self._last_image_seen_time = imageSeenTime
+    
     async with self.get_user_lock():
       await self.get_user_queue().put((event.args, processed_timestep, user_stats))
     asyncio.create_task(self._process_save_queue())
@@ -727,6 +737,13 @@ class EnvStage(Stage):
       # when episode resets, update server-side
       update_display=episode_reset,
     )
+    
+    # Signal that system is ready for next input after all processing is complete
+    currentTime = await ui.run_javascript("new Date().toISOString()", timeout=10)
+    ui.run_javascript("window.setSystemReadyForNextInput();")
+    
+    # Update the systemReadyTime in the most recent save data
+    await self.update_system_ready_time(currentTime)
     ################
     # Episode over?
     ################
@@ -782,54 +799,9 @@ class EnvStage(Stage):
       )
 
     await self.set_user_data(stage_finished=stage_finished)
-    
-    # Record action processing end time and calculate processing time
-    action_processing_end_time = time.time()
-    action_processing_time = action_processing_end_time - action_processing_start_time
-    
-    # Store action processing timing data
-    timing_data = {
-      "action_processing_start_time": action_processing_start_time,
-      "action_processing_end_time": action_processing_end_time,
-      "action_processing_time": action_processing_time,
-      "client_action_processing_start_time": client_action_processing_start_time
-    }
-    
-    # Log the action processing time
-    if self.verbosity:
-      logger.info(f"Action processing time: {action_processing_time:.4f} seconds")
-    
-    # Store timing data for later use
-    await self.set_user_data(action_processing_timing=timing_data)
-    logger.info("Reached here")
-    # Upload action processing time data to Google Cloud Storage
-    try:
-        logger.info("Reached here 0")
-        user_id = app.storage.user["seed"]
-        stage_name = self.name
-        logger.info("Reached here 1")
-        # Create the action processing data structure
-        action_processing_data = {
-            "action_processing_start_time": action_processing_start_time,
-            "action_processing_end_time": action_processing_end_time,
-            "action_processing_time": action_processing_time,
-            "client_action_processing_start_time": client_action_processing_start_time,
-            "action_key": key,
-            "action_name": self.action_to_name.get(self.key_to_action.get(key, -1), key),
-            "action_idx": self.key_to_action.get(key, -1)
-        }
-        logger.info("Reached here 2")
-        # Upload to GCS asynchronously
-        asyncio.create_task(save_action_processing_time_to_gcs(
-            action_processing_data, user_id, stage_name, GCS_BUCKET_NAME
-        ))
-        
-    except Exception as e:
-        logger.error(f"Error uploading action processing time to GCS: {e}")
 
   async def handle_button_press(self, container):
     pass  # do nothing
-
 
 
 @dataclasses.dataclass

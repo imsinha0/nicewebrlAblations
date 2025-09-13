@@ -1,18 +1,29 @@
+from nicegui import app
+from typing import List, Union
 import dataclasses
 import uuid
-from typing import List, Union
-
 import jax.numpy as jnp
 import jax.random
-from nicegui import app
+import os
 
-from nicewebrl.container import Container
-from nicewebrl.logging import get_logger
-from nicewebrl.nicejax import new_rng
-from nicewebrl.stages import Block, Stage
-from nicewebrl.utils import get_progress, get_user_lock
+# Check environment variable to determine which nicejax module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
 
-# Module-level variables
+if ABLATION_MODE == "ablation1" or ABLATION_MODE == "ablation4":
+    # Import from ablation1nicejax.py
+    from ablation1.ablation1nicejax import new_rng
+elif ABLATION_MODE == "ablation3":
+    # Import from ablation3nicejax.py
+    from ablation3.ablation3nicejax import new_rng
+else:
+    # Import from normal nicejax.py
+    from currentNiceWebRL.nicejax import new_rng
+
+from currentNiceWebRL.stages import Block, Stage
+from currentNiceWebRL.container import Container
+from currentNiceWebRL.logging import get_logger
+from currentNiceWebRL.utils import get_user_lock, get_progress
+
 logger = get_logger(__name__)
 
 
@@ -70,7 +81,7 @@ class SimpleExperiment(Container):
     return stage_order
 
   def get_experiment_stage_idx(self):
-    stage_idx = app.storage.user["stage_idx"]
+    stage_idx = app.storage.user.get("stage_idx", None)
     if stage_idx is None:
       stage_idx = 0
       app.storage.user["stage_idx"] = stage_idx
@@ -112,7 +123,7 @@ class Experiment(Container):
     super().__post_init__()
     if self.name is None:
       self.name = f"experiment_{uuid.uuid4().hex[:8]}"
-    
+
     stage_idx = 0
     for idx, block in enumerate(self.blocks):
       block.unique_id = f"{idx}_{block.unique_id}"
@@ -234,6 +245,11 @@ class Experiment(Container):
   def not_finished(self):
     block_idx = self.get_block_idx()
     return block_idx < len(self.blocks)
+
+  def finished(self):
+    block_idx = self.get_block_idx()
+    finished = app.storage.user.get("experiment_finished", False)
+    return block_idx >= len(self.blocks) or finished
 
   def force_finish(self):
     app.storage.user["stage_idx"] = self.num_stages

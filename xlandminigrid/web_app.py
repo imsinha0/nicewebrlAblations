@@ -7,15 +7,28 @@ from tortoise import Tortoise
 import jax
 import httpx
 
-import nicewebrl
-from nicewebrl.logging import setup_logging, get_logger
-from nicewebrl.utils import wait_for_button_or_keypress
-from nicewebrl import stages
+import currentNiceWebRL as nicewebrl
+from currentNiceWebRL.logging import setup_logging, get_logger
+from currentNiceWebRL.utils import wait_for_button_or_keypress
+
+
+os.environ["ABLATION_MODE"] = "ablation4" # current | ablation 1 | ablation 2 | ablation 3 | ablation 4
+
+
+# Check environment variable to determine which stages module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+if ABLATION_MODE == "ablation2" or ABLATION_MODE == "ablation4":
+    from ablation2 import ablation2stages as stages
+else:
+    from currentNiceWebRL import stages
 
 import experiment_structure as experiment
 
+
+#set environment variable to ablation1
+#os.environ["ABLATION_MODE"] = "ablation1"
+
 # Import the existing Google Cloud Storage functions
-from upload_google_data import save_action_processing_time_to_gcs
 
 DATA_DIR = "data"
 DATABASE_FILE = "db.sqlite"
@@ -65,9 +78,15 @@ if not os.path.exists(DATA_DIR):
 
 
 async def init_db() -> None:
+  # Determine which models module to use based on ABLATION_MODE
+  if ABLATION_MODE == "ablation2" or ABLATION_MODE == "ablation4":
+    models_module = "ablation2.ablation2stages"
+  else:
+    models_module = "currentNiceWebRL.stages"
+  
   await Tortoise.init(
     db_url=f"sqlite://{DATA_DIR}/{DATABASE_FILE}",
-    modules={"models": ["nicewebrl.stages"]},
+    modules={"models": [models_module]},
   )
   await Tortoise.generate_schemas()
 
@@ -274,8 +293,6 @@ Examples:
             "Content-Type": "application/json",
           }
           
-          #current_stage = experiment.all_stages[app.storage.user["stage_idx"]]
-
           current_stage = experiment.all_stages[1]
 
           # Get the environment state from the stage

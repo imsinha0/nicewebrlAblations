@@ -1,60 +1,94 @@
-from nicewebrl.dataframe import DataFrame
-from nicewebrl.dataframe import concat_list as concat_dataframes
-from nicewebrl.utils import toggle_fullscreen
-from nicewebrl.utils import check_fullscreen
-from nicewebrl.utils import clear_element
-from nicewebrl.utils import wait_for_button_or_keypress
-from nicewebrl.utils import retry_with_exponential_backoff
-from nicewebrl.utils import basic_javascript_file
-from nicewebrl.utils import multihuman_javascript_file
-from nicewebrl.utils import initialize_user
-from nicewebrl.utils import get_user_session_minutes
-from nicewebrl.utils import broadcast_message
-from nicewebrl.utils import read_msgpack_records
-from nicewebrl.utils import write_msgpack_record
-from nicewebrl.utils import read_all_records
-from nicewebrl.utils import read_all_records_sync
-from nicewebrl.utils import get_user_lock
-from nicewebrl.utils import prevent_default_spacebar_behavior
-from nicewebrl.utils import user_data_file
-from nicewebrl.utils import user_metadata_file
-from nicewebrl.utils import save_metadata
-from nicewebrl.utils import get_progress
-from nicewebrl.utils import load_data
+from currentNiceWebRL.dataframe import DataFrame
+from currentNiceWebRL.dataframe import concat_dataframes
 
-from nicewebrl.nicejax import get_rng
-from nicewebrl.nicejax import new_rng
-from nicewebrl.nicejax import match_types
-from nicewebrl.nicejax import make_serializable
-#from nicewebrl.nicejax import deserialize
-from nicewebrl.nicejax import base64_npimage
-from nicewebrl.nicejax import StepType
-from nicewebrl.nicejax import TimeStep
-#from nicewebrl.nicejax import EnvParams
-from nicewebrl.nicejax import TimestepWrapper
-from nicewebrl.nicejax import JaxWebEnv
-from nicewebrl.nicejax import get_size
+from currentNiceWebRL.utils import toggle_fullscreen
+from currentNiceWebRL.utils import check_fullscreen
+from currentNiceWebRL.utils import clear_element
+from currentNiceWebRL.utils import wait_for_button_or_keypress
+from currentNiceWebRL.utils import retry_with_exponential_backoff
+from currentNiceWebRL.utils import basic_javascript_file
+from currentNiceWebRL.utils import multihuman_javascript_file
+from currentNiceWebRL.utils import initialize_user
+from currentNiceWebRL.utils import get_user_session_minutes
+from currentNiceWebRL.utils import broadcast_message
+from currentNiceWebRL.utils import read_msgpack_records
+from currentNiceWebRL.utils import write_msgpack_record
+from currentNiceWebRL.utils import read_all_records
+from currentNiceWebRL.utils import read_all_records_sync
+from currentNiceWebRL.utils import get_user_lock
+from currentNiceWebRL.utils import prevent_default_spacebar_behavior
+from currentNiceWebRL.utils import user_data_file
+from currentNiceWebRL.utils import user_metadata_file
+from currentNiceWebRL.utils import save_metadata
+from currentNiceWebRL.utils import get_progress
+from currentNiceWebRL.utils import load_data
+
+import os
+
+# Check environment variable to determine which nicejax module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+
+if ABLATION_MODE == "ablation1" or ABLATION_MODE == "ablation4":
+    # Import from ablation1nicejax.py
+    from ablation1.ablation1nicejax import get_rng
+    from ablation1.ablation1nicejax import new_rng
+    from ablation1.ablation1nicejax import match_types
+    from ablation1.ablation1nicejax import make_serializable
+    from ablation1.ablation1nicejax import base64_npimage
+    from ablation1.ablation1nicejax import StepType
+    from ablation1.ablation1nicejax import TimeStep
+    from ablation1.ablation1nicejax import EnvParams
+    from ablation1.ablation1nicejax import TimestepWrapper
+    from ablation1.ablation1nicejax import JaxWebEnv
+    from ablation1.ablation1nicejax import get_size
+elif ABLATION_MODE == "ablation3":
+    # Import from ablation3nicejax.py
+    from ablation3.ablation3nicejax import get_rng
+    from ablation3.ablation3nicejax import new_rng
+    from ablation3.ablation3nicejax import match_types
+    from ablation3.ablation3nicejax import make_serializable
+    from ablation3.ablation3nicejax import base64_npimage
+    from ablation3.ablation3nicejax import StepType
+    from ablation3.ablation3nicejax import TimeStep
+    from ablation3.ablation3nicejax import EnvParams
+    from ablation3.ablation3nicejax import TimestepWrapper
+    from ablation3.ablation3nicejax import JaxWebEnv
+    from ablation3.ablation3nicejax import get_size
+else:
+    # Import from normal nicejax.py
+    from currentNiceWebRL.nicejax import get_rng
+    from currentNiceWebRL.nicejax import new_rng
+    from currentNiceWebRL.nicejax import match_types
+    from currentNiceWebRL.nicejax import make_serializable
+    # from nicewebrl.nicejax import deserialize
+    from currentNiceWebRL.nicejax import base64_npimage
+    from currentNiceWebRL.nicejax import StepType
+    from currentNiceWebRL.nicejax import TimeStep
+    from currentNiceWebRL.nicejax import EnvParams
+    from currentNiceWebRL.nicejax import TimestepWrapper
+    from currentNiceWebRL.nicejax import JaxWebEnv
+    from currentNiceWebRL.nicejax import get_size
 
 
-from nicewebrl.stages import EnvStageState
-from nicewebrl.stages import StageStateModel
-from nicewebrl.stages import Stage
-from nicewebrl.stages import FeedbackStage
-from nicewebrl.stages import EnvStage
-from nicewebrl.stages import Block
-from nicewebrl.stages import prepare_blocks
-from nicewebrl.stages import generate_stage_order
-from nicewebrl.stages import time_diff
-from nicewebrl.stages import broadcast_metadata
+from currentNiceWebRL.stages import EnvStageState
+from currentNiceWebRL.stages import StageStateModel
+from currentNiceWebRL.stages import Stage
+from currentNiceWebRL.stages import FeedbackStage
+from currentNiceWebRL.stages import EnvStage
+from currentNiceWebRL.stages import Block
+from currentNiceWebRL.stages import prepare_blocks
+from currentNiceWebRL.stages import generate_stage_order
+from currentNiceWebRL.stages import time_diff
+from currentNiceWebRL.stages import broadcast_metadata
 
-from nicewebrl.experiment import Experiment
-from nicewebrl.experiment import SimpleExperiment
-from nicewebrl.container import Container
+from currentNiceWebRL.experiment import Experiment
+from currentNiceWebRL.experiment import SimpleExperiment
+from currentNiceWebRL.container import Container
 
-from nicewebrl.logging import get_logger
-from nicewebrl.logging import setup_logging
+from currentNiceWebRL.logging import get_logger
+from currentNiceWebRL.logging import setup_logging
 
-from nicewebrl.data_analysis import compute_reaction_time
-from nicewebrl.data_analysis import time_diff
+from currentNiceWebRL.data_analysis import compute_reaction_time
+from currentNiceWebRL.data_analysis import time_diff
 
-from nicewebrl.run_experiment import run
+from currentNiceWebRL.run_experiment import run

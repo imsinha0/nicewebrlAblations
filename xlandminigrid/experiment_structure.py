@@ -4,10 +4,17 @@ import jax.numpy as jnp
 from typing import Optional
 from nicegui import ui
 import asyncio
-import nicewebrl
-from nicewebrl import JaxWebEnv, base64_npimage, TimeStep, TimestepWrapper
-from nicewebrl import Stage, EnvStage, FeedbackStage
-from nicewebrl import get_logger
+import os
+import currentNiceWebRL as nicewebrl
+from currentNiceWebRL import JaxWebEnv, base64_npimage, TimeStep, TimestepWrapper
+from currentNiceWebRL import get_logger
+
+# Check environment variable to determine which stages module to use
+ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+if ABLATION_MODE == "ablation2" or ABLATION_MODE == "ablation4":
+    from ablation2.ablation2stages import Stage, EnvStage, FeedbackStage
+else:
+    from currentNiceWebRL import Stage, EnvStage, FeedbackStage
 import xminigrid
 from xminigrid.wrappers import GymAutoResetWrapper
 from xminigrid.experimental.img_obs import RGBImgObservationWrapper

@@ -16,11 +16,14 @@ from flax.core import FrozenDict
 from nicegui import app, ui
 from PIL import Image
 
-from nicewebrl.logging import get_logger
+from currentNiceWebRL.logging import get_logger
 
 # Type definitions
 TIMESTEP = Any
 RENDER_FN = Callable[[TIMESTEP], jax.Array]
+
+EnvParams = struct.PyTreeNode
+
 
 # Module-level variables
 logger = get_logger(__name__)
