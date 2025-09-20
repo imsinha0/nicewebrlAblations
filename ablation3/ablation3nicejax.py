@@ -515,4 +515,4 @@ class JaxWebEnv:
         print("Skipping JIT precompilation (removed).")
 
     def precompile_vmap_render_fn(self, render_fn: RENDER_FN, dummy_env_params: struct.PyTreeNode) -> RENDER_FN:
-        return jax.vmap(render_fn)
+        return render_fn

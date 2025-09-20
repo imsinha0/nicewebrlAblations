@@ -373,21 +373,7 @@ class EnvStage(Stage):
     return self._user_queues[user_seed]
 
   async def finish_saving_user_data(self):
-    await self.get_user_queue().join()
-
-  async def update_system_ready_time(self, system_ready_time):
-    """Update the systemReadyTime in the most recent save data"""
-    # Get the most recent save data from the queue and update it
-    queue = self.get_user_queue()
-    if not queue.empty():
-      # Process the queue with the updated system ready time
-      await self._process_save_queue_with_ready_time(system_ready_time)
-    
-    # Calculate and log the total processing time
-    if hasattr(self, '_last_image_seen_time') and self._last_image_seen_time:
-      processing_time = time_diff(self._last_image_seen_time, system_ready_time) / 1000.0
-      logger.info(f"Total processing time: {processing_time:.3f} seconds")
-    
+    await self.get_user_queue().join()    
 
   async def _process_save_queue_with_ready_time(self, system_ready_time):
     """Process all items currently in the queue for current user with updated system ready time"""
@@ -429,6 +415,12 @@ class EnvStage(Stage):
     rng = new_rng()
     timestep = self.get_user_data("stage_state").timestep
     next_timesteps = self.web_env.next_steps(rng, timestep, self.env_params)
+
+    # ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
+    # if ABLATION_MODE == "ablation3":
+    #   next_images = [self.render_fn(ts) for ts in next_timesteps]
+    # else:
+    #   next_images = self.vmap_render_fn(next_timesteps)
     next_images = self.vmap_render_fn(next_timesteps)
 
     next_images = {
@@ -437,6 +429,7 @@ class EnvStage(Stage):
     }
 
     js_code = f"window.next_states = {next_images};"
+    js_code += f"window.systemReadyTime = new Date();"
 
     ui.run_javascript(js_code)
     await self.set_user_data(next_timesteps=next_timesteps)
@@ -566,9 +559,9 @@ class EnvStage(Stage):
         stage_state = self.get_user_data("stage_state")
         if self.verbosity:
           logger.info(f"'{name}' saved file")
-          logger.info(f"image display delay ∆t: {time_diff(keydownTime, imageSeenTime) / 1000.0}")
-          if systemReadyTime is not None:
-            logger.info(f"total processing time ∆t: {time_diff(imageSeenTime, systemReadyTime) / 1000.0}")
+          logger.info(f"imageSeenTime: {imageSeenTime}")
+          logger.info(f"systemReadyTime: {systemReadyTime}")
+          logger.info(f"keydownTime: {keydownTime}")
           logger.info(f"stage state: {self.user_stats()}")
           logger.info(f"env step: {stage_state.nsteps}")
 
@@ -741,9 +734,7 @@ class EnvStage(Stage):
     # Signal that system is ready for next input after all processing is complete
     currentTime = await ui.run_javascript("new Date().toISOString()", timeout=10)
     ui.run_javascript("window.setSystemReadyForNextInput();")
-    
-    # Update the systemReadyTime in the most recent save data
-    await self.update_system_ready_time(currentTime)
+
     ################
     # Episode over?
     ################

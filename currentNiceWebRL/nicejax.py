@@ -254,6 +254,8 @@ class JaxWebEnv:
 
     self.reset = jax.jit(env.reset)
     self.next_steps = jax.jit(next_steps)
+    self.step = jax.jit(env.step)
+    self.action_array = actions
 
   def precompile(self, dummy_env_params: Optional[struct.PyTreeNode] = None) -> None:
     """Call this function to pre-compile jax functions before experiment starts."""
@@ -264,8 +266,12 @@ class JaxWebEnv:
     print(f"\treset time: {time.time() - start}")
     start = time.time()
     timestep = self.reset(dummy_rng, dummy_env_params)
+
+    self.step = self.step.lower(
+        dummy_rng, timestep, self.action_array[0], dummy_env_params
+    ).compile()
     self.next_steps = self.next_steps.lower(
-      dummy_rng, timestep, dummy_env_params
+        dummy_rng, timestep, dummy_env_params
     ).compile()
     print(f"\tstep time: {time.time() - start}")
 

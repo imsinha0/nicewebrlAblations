@@ -12,7 +12,7 @@ from currentNiceWebRL.logging import setup_logging, get_logger
 from currentNiceWebRL.utils import wait_for_button_or_keypress
 
 
-os.environ["ABLATION_MODE"] = "ablation4" # current | ablation 1 | ablation 2 | ablation 3 | ablation 4
+os.environ["ABLATION_MODE"] = "ablation2" # current | ablation1 | ablation2 | ablation3 | ablation4
 
 
 # Check environment variable to determine which stages module to use

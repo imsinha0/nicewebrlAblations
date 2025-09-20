@@ -34,9 +34,9 @@ VERBOSITY = 10
 ########################################
 # Define actions and corresponding keys
 ########################################
-actions = [Action.RIGHT, Action.DOWN, Action.LEFT, Action.UP, Action.DO]
+actions = [Action.LEFT, Action.DOWN, Action.RIGHT, Action.UP, Action.DO]
 action_array = jnp.array([a.value for a in actions])
-action_keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", " "]
+action_keys = ["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp", " "]
 action_to_name = [a.name for a in actions]
 
 ########################################
@@ -71,10 +71,12 @@ vmap_render_fn = jax_web_env.precompile_vmap_render_fn(
 # jit it and precompile
 print("Compiling render function.")
 start = time.time()
-render_fn = jax.jit(render_fn)
-render_fn = render_fn.lower(
-  jax_web_env.reset(jax.random.PRNGKey(0), jax_env.default_params)
-).compile()
+if ABLATION_MODE not in ["ablation1", "ablation3", "ablation4"]:
+  render_fn = jax.jit(render_fn)
+  render_fn = render_fn.lower(
+    jax_web_env.reset(jax.random.PRNGKey(0), jax_env.default_params)
+  ).compile()
+
 print(f"\ttime: {time.time() - start}")
 
 

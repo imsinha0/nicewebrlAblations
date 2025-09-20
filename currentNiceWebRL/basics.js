@@ -81,31 +81,31 @@ document.addEventListener('DOMContentLoaded', async function () {
   ////////////////
   // Monitor when system becomes ready for next input
   ////////////////
-  function monitorSystemReady() {
-    // Use a simple polling approach to detect when accept_keys becomes true
-    const checkReady = () => {
-      if (window.accept_keys && window.systemReadyTime === null) {
-        window.systemReadyTime = new Date();
-        console.log('System ready for next input at:', window.systemReadyTime);
-      }
-    };
+  // function monitorSystemReady() {
+  //   // Use a simple polling approach to detect when accept_keys becomes true
+  //   const checkReady = () => {
+  //     if (window.accept_keys && window.systemReadyTime === null) {
+  //       window.systemReadyTime = new Date();
+  //       console.log('System ready for next input at:', window.systemReadyTime);
+  //     }
+  //   };
     
-    // Check every 10ms for responsiveness
-    setInterval(checkReady, 10);
-  }
+  //   // Check every 10ms for responsiveness
+  //   setInterval(checkReady, 10);
+  // }
   
-  monitorSystemReady();
+  // monitorSystemReady();
   
   ////////////////
   // Track when system is actually ready for next input after processing
   ////////////////
-  function setSystemReadyForNextInput() {
-    window.systemReadyTime = new Date();
-    console.log('System ready for next input at:', window.systemReadyTime);
-  }
+  // function setSystemReadyForNextInput() {
+  //   window.systemReadyTime = new Date();
+  //   console.log('System ready for next input at:', window.systemReadyTime);
+  // }
   
-  // Make this function globally available
-  window.setSystemReadyForNextInput = setSystemReadyForNextInput;
+  // // Make this function globally available
+  // window.setSystemReadyForNextInput = setSystemReadyForNextInput;
 
   ////////////////
   // how to handle key presses?
@@ -140,6 +140,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Record the current time when the keydown event occurs FIRST
         var keydownTime = new Date();
         
+
+        await emitEvent('key_pressed', {
+          key: event.key,
+          keydownTime: keydownTime,
+          imageSeenTime: window.imageSeenTime,
+          systemReadyTime: window.systemReadyTime
+        });
+        console.log('emitted key_pressed');
+
         next_state = window.next_states[event.key];
         window.next_states = null;
         var imgElement = document.getElementById('stateImage');
@@ -148,15 +157,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           // Set imageSeenTime when the image updates to the next image
           window.imageSeenTime = new Date();
         }
-        
-        // Emit event immediately - systemReadyTime will be set later by the server
-        await emitEvent('key_pressed', {
-          key: event.key,
-          keydownTime: keydownTime,
-          imageSeenTime: window.imageSeenTime,
-          systemReadyTime: null  // Will be updated by server when ready
-        });
-        console.log('emitted key_pressed');
+
       }
     }
     window.key_count = window.key_count + 1;

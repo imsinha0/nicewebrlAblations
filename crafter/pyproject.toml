@@ -9,7 +9,6 @@ authors = [
     {name = "Wilka Carvalho", email = "wcarvalho92@gmail.com"},
 ]
 description = "Python library for quickly making interactive RL Apps with NiceGUI"
-readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",

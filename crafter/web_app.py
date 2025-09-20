@@ -479,19 +479,6 @@ async def index(request: Request):
       )
       await start_experiment(container)
 
-# NOTE: nice.webrl now defines run
-
-# nicewebrl.run(
-#   storage_secret="private key to secure the browser session cookie",
-#   host="0.0.0.0",
-#   port=8080,
-#   # reload='FLY_ALLOC_ID' not in os.environ,
-#   reload=False,
-#   title="Crafter Web App",
-#   experiment_file="experiment_structure.py",
-#   on_startup_fn=None, # e.g. restore cache
-#   on_termination_fn=None, # e.g. saving and uploading to google cloud
-# )
 ui.run(
  storage_secret="private key to secure the browser session cookie",
  host="0.0.0.0",

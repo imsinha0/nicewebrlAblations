@@ -254,48 +254,19 @@ class JaxWebEnv:
     except Exception:
       # fallback - iterate and cast each
       self._action_list = [int(x) for x in list(actions_arr)]
-
+    
     def next_steps(rng, timestep, env_params):
-      """
-      Compute next timesteps for each action WITHOUT using jax.vmap/jit.
-      This uses a plain Python loop and stacks the results at the end into jnp arrays
-      to preserve the same output types.
-      """
-      timesteps_list = []
-      infos_list = []
-      for a in self._action_list:
-        # call env.step with native Python int action
-        # keep the same signature env.step(rng, timestep, action, env_params) or whatever your env expects
-        try:
-          out = env.step(rng, timestep, a, env_params)
-        except TypeError:
-          # try without params if env.step doesn't accept env_params
-          out = env.step(rng, timestep, a)
-        # env.step is expected to return (timestep, info) or TimeStep; support both
-        if isinstance(out, tuple) and len(out) == 2:
-          ts, info = out
-        else:
-          ts, info = out, {}
-        timesteps_list.append(ts)
-        infos_list.append(info)
+      # vmap over rngs and actions. re-use timestep
+      timesteps = jax.vmap(env.step, in_axes=(None, None, 0, None), out_axes=0)(
+        rng, timestep, actions, env_params
+      )
+      return timesteps
 
-      # Stack the pytrees across the new leading axis (actions). Re-create a pytree where
-      # each leaf is stacked along axis 0 so that shape matches previous vmap output.
-      # We convert lists of leaves into arrays using jnp.stack to keep types consistent.
-      # Helper that stacks corresponding leaves from all timesteps.
-      def stack_leaves(*leaves):
-        # leaves is a tuple with one leaf per action
-        # convert each to array (if needed) and stack
-        arrays = [jnp.asarray(l) for l in leaves]
-        return jnp.stack(arrays, axis=0)
-
-      stacked_timesteps = jax.tree_util.tree_map(lambda *l: stack_leaves(*l), *timesteps_list)
-
-      # infos_list may contain dicts; keep as a Python list of dicts (or convert similarly if needed)
-      return stacked_timesteps
     
     self.reset = env.reset
     self.next_steps = next_steps
+    self.step = env.step
+    self.action_array = actions
 
   def precompile(self, dummy_env_params: Optional[struct.PyTreeNode] = None) -> None:
       """No-op: kept for API compatibility."""

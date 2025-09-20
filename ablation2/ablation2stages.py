@@ -1,3 +1,4 @@
+
 from typing import List, Any, Callable, Dict, Optional, Union
 from functools import partial
 import uuid
@@ -18,18 +19,10 @@ from tortoise import fields, models
 from nicegui import app, ui
 import os
 
-# Check environment variable to determine which nicejax module to use
-ABLATION_MODE = os.getenv("ABLATION_MODE", "normal")
 
-if ABLATION_MODE == "ablation1" or ABLATION_MODE == "ablation4":
-    # Import from ablation1nicejax.py
-    from ablation1.ablation1nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
-elif ABLATION_MODE == "ablation3":
+from currentNiceWebRL.nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
 
-    from ablation3.ablation3nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
-else:
-    # Import from normal nicejax.py
-    from currentNiceWebRL.nicejax import new_rng, base64_npimage, make_serializable, TimeStep, JaxWebEnv
+# BUG: I think you should importing a custom nicejax that only jits (+ precompiles) step/render
 
 from currentNiceWebRL.logging import get_logger
 from currentNiceWebRL.utils import retry_with_exponential_backoff
@@ -373,21 +366,7 @@ class EnvStage(Stage):
     return self._user_queues[user_seed]
 
   async def finish_saving_user_data(self):
-    await self.get_user_queue().join()
-
-  async def update_system_ready_time(self, system_ready_time):
-    """Update the systemReadyTime in the most recent save data"""
-    # Get the most recent save data from the queue and update it
-    queue = self.get_user_queue()
-    if not queue.empty():
-      # Process the queue with the updated system ready time
-      await self._process_save_queue_with_ready_time(system_ready_time)
-    
-    # Calculate and log the total processing time
-    if hasattr(self, '_last_image_seen_time') and self._last_image_seen_time:
-      processing_time = time_diff(self._last_image_seen_time, system_ready_time) / 1000.0
-      logger.info(f"Total processing time: {processing_time:.3f} seconds")
-    
+    await self.get_user_queue().join()    
 
   async def _process_save_queue_with_ready_time(self, system_ready_time):
     """Process all items currently in the queue for current user with updated system ready time"""
@@ -556,9 +535,9 @@ class EnvStage(Stage):
         stage_state = self.get_user_data("stage_state")
         if self.verbosity:
           logger.info(f"'{name}' saved file")
-          logger.info(f"image display delay ∆t: {time_diff(keydownTime, imageSeenTime) / 1000.0}")
-          if systemReadyTime is not None:
-            logger.info(f"total processing time ∆t: {time_diff(imageSeenTime, systemReadyTime) / 1000.0}")
+          logger.info(f"imageSeenTime: {imageSeenTime}")
+          logger.info(f"systemReadyTime: {systemReadyTime}")
+          logger.info(f"keydownTime: {keydownTime}")
           logger.info(f"stage state: {self.user_stats()}")
           logger.info(f"env step: {stage_state.nsteps}")
 
@@ -654,10 +633,6 @@ class EnvStage(Stage):
     timestep = self.get_user_data("stage_state").timestep
     processed_timestep = self.preprocess_timestep(timestep)
     
-    # Store the image seen time for later processing time calculation
-    imageSeenTime = event.args.get("imageSeenTime")
-    if imageSeenTime:
-      self._last_image_seen_time = imageSeenTime
     
     async with self.get_user_lock():
       await self.get_user_queue().put((event.args, processed_timestep, user_stats))
@@ -673,29 +648,28 @@ class EnvStage(Stage):
       else:
         action_idx = self.key_to_action[key]
         rng = new_rng()
-        next_timesteps = self.web_env.next_steps(rng, timestep, self.env_params)
-        timestep = jax_tree_map(lambda t: t[action_idx], next_timesteps)
+        timestep = self.web_env.step(rng, timestep, action_idx, self.env_params)
+
+        #next_timesteps = self.web_env.next_steps(rng, timestep, self.env_params)
+        #timestep = jax_tree_map(lambda t: t[action_idx], next_timesteps)
     else:
       # compute next state on-demand
       action_idx = self.key_to_action[key]
       rng = new_rng()
-      next_timesteps = self.web_env.next_steps(rng, timestep, self.env_params)
-      timestep = jax_tree_map(lambda t: t[action_idx], next_timesteps)
+      timestep = self.web_env.step(rng, timestep, action_idx, self.env_params)
+      #next_timesteps = self.web_env.next_steps(rng, timestep, self.env_params)
+      #timestep = jax_tree_map(lambda t: t[action_idx], next_timesteps)
 
     #############################
     # render and display the new state
     #############################
     new_image = self.render_fn(timestep)
     new_image_b64 = base64_npimage(new_image)
-    
+
     # Update the image on the client side and clear next_states
     js_code = f"""
       var imgElement = document.getElementById('stateImage');
-      if (imgElement !== null) {{
-        imgElement.src = '{new_image_b64}';
-        // Don't set imageSeenTime here - let the onload event handle it
-      }}
-      window.next_states = null;
+      imgElement.src = '{new_image_b64}';
     """
     ui.run_javascript(js_code)
 
@@ -740,24 +714,18 @@ class EnvStage(Stage):
     ################
     if episode_reset:
       await self.wait_for_start(container)
-    await self.step_and_send_timestep(
-      container,
-      # image is normally updated client-side
-      # when episode resets, update server-side
-      update_display=episode_reset,
-    )
     
     # Signal that system is ready for next input after all processing is complete
     currentTime = await ui.run_javascript("new Date().toISOString()", timeout=10)
     ui.run_javascript("window.setSystemReadyForNextInput();")
     
     # Reset next_states to allow next key press
+    
     dummy_next_states = {key: "dummy" for key in self.action_keys}
     js_code = f"window.next_states = {dummy_next_states};"
+    js_code += f"window.systemReadyTime = new Date();"
     ui.run_javascript(js_code)
-    
-    # Update the systemReadyTime in the most recent save data
-    await self.update_system_ready_time(currentTime)
+
     ################
     # Episode over?
     ################

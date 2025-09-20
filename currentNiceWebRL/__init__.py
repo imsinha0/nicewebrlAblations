@@ -90,5 +90,3 @@ from currentNiceWebRL.logging import setup_logging
 
 from currentNiceWebRL.data_analysis import compute_reaction_time
 from currentNiceWebRL.data_analysis import time_diff
-
-from currentNiceWebRL.run_experiment import run
